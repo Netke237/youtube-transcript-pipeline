@@ -1,0 +1,12 @@
+[pipeline]
+; Folder where transcript markdown files will be saved
+output_dir = C:\Users\YourName\Documents\Obsidian\inbox
+
+; Whisper model size: tiny, base, small, medium, large
+whisper_model = base
+
+; Default number of videos to fetch per search
+default_limit = 10
+
+; Default language code: en, de, fr, etc.
+default_lang = en

@@ -1,0 +1,18 @@
+# Virtual environment
+venv/
+
+# Personal config (contains local paths)
+config.ini
+config.yaml
+
+# Personal download history
+downloaded.json
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+.DS_Store
+Thumbs.db
