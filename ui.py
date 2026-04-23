@@ -4,9 +4,14 @@ YouTube Transcript Pipeline — Modern TUI
 Run: python ui.py
 """
 
+import os
 import sys
 import tempfile
 from pathlib import Path
+
+# Fix Windows terminal encoding for Unicode characters
+if sys.platform == "win32":
+    os.environ["PYTHONIOENCODING"] = "utf-8"
 
 from rich.console import Console
 from rich.panel import Panel
@@ -24,7 +29,22 @@ from pipeline import (
     video_id_from_url, extract_playlist_videos,
 )
 
-console = Console()
+console = Console(emoji=False)
+
+
+def safe_text(text, max_length=60):
+    """Remove emoji and other characters that break Windows terminal output."""
+    if not text:
+        return ""
+    # Replace common emoji and wide unicode chars
+    cleaned = ""
+    for char in text:
+        if ord(char) > 0xFFFF:
+            cleaned += "?"  # Replace emoji with ?
+        else:
+            cleaned += char
+    return cleaned[:max_length]
+
 
 # Palette — inspired by clean, modern design (teal / sage / coral)
 TEAL   = "#4AADA0"
@@ -155,8 +175,8 @@ def select_videos_from_playlist(videos):
     console.print()
     
     for i, video in enumerate(videos, 1):
-        title = (video.get("title") or "Untitled")[:65]
-        channel = video.get("channel") or video.get("uploader", "—")
+        title = safe_text(video.get("title") or "Untitled", 65)
+        channel = safe_text(video.get("channel") or video.get("uploader", "—"), 30)
         duration = video.get("duration", 0)
         if duration:
             mins, secs = divmod(int(duration), 60)
@@ -228,12 +248,12 @@ def run_pipeline(videos, config, lang, fallback, output_dir):
             if not video_id:
                 continue
 
-            title_preview = (video.get("title") or video_id)[:60]
+            title_preview = safe_text(video.get("title") or video_id, 60)
 
             if video_id in downloaded:
                 table.add_row(
                     title_preview,
-                    video.get("channel") or video.get("uploader", "—"),
+                    safe_text(video.get("channel") or video.get("uploader", "—"), 25),
                     f"[{CORAL}]skipped[/{CORAL}]",
                     "—",
                 )
@@ -241,7 +261,7 @@ def run_pipeline(videos, config, lang, fallback, output_dir):
                 continue
 
             with console.status(
-                f"  [{TEAL}][{i}/{len(videos)}][/{TEAL}]  {title_preview[:50]}…",
+                f"  [{TEAL}][{i}/{len(videos)}][/{TEAL}]  {safe_text(title_preview, 50)}…",
                 spinner="dots",
                 spinner_style=TEAL,
             ):
@@ -250,7 +270,7 @@ def run_pipeline(videos, config, lang, fallback, output_dir):
                     video_id, lang, whisper_model, tmp_path, fallback
                 )
 
-            channel = meta.get("channel") or meta.get("uploader", "—")
+            channel = safe_text(meta.get("channel") or meta.get("uploader", "—"), 25)
 
             if transcript:
                 filename, content = to_markdown(meta, transcript, source)
