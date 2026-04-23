@@ -94,6 +94,32 @@ def search_videos(query, channel=None, limit=10):
     return videos
 
 
+def extract_playlist_videos(playlist_url):
+    """Extract all videos from a public YouTube playlist. Returns list of metadata dicts."""
+    cmd = YT_DLP + [
+        "--flat-playlist",
+        "--dump-json",
+        "--no-warnings",
+        playlist_url,
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if not result.stdout.strip():
+        print(f"  [debug] yt-dlp returned no output. stderr: {result.stderr[:300]}")
+        return []
+    
+    videos = []
+    for line in result.stdout.strip().split("\n"):
+        line = line.strip()
+        if line:
+            try:
+                data = json.loads(line)
+                videos.append(data)
+            except json.JSONDecodeError:
+                pass
+    return videos
+
+
 def get_video_metadata(video_id):
     """Fetch full metadata for a single video ID."""
     url = f"https://www.youtube.com/watch?v={video_id}"

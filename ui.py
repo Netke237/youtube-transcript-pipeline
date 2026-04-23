@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from pipeline import (
     load_config, load_downloaded, save_downloaded,
     search_videos, get_video_metadata, process_video, to_markdown,
-    video_id_from_url,
+    video_id_from_url, extract_playlist_videos,
 )
 
 console = Console()
@@ -67,7 +67,7 @@ def print_menu():
         title="[bold]  1  [/bold]",
         border_style=TEAL,
         padding=(1, 3),
-        width=26,
+        width=24,
     )
     card2 = Panel(
         Text.from_markup(
@@ -77,19 +77,29 @@ def print_menu():
         title="[bold]  2  [/bold]",
         border_style=SAGE,
         padding=(1, 3),
-        width=26,
+        width=24,
     )
     card3 = Panel(
         Text.from_markup(
-            f"[bold {CORAL}]Quit[/bold {CORAL}]\n\n"
+            f"[bold {CORAL}]Playlist[/bold {CORAL}] URL\n\n"
+            f"[dim]Browse a public playlist\nand select videos[/dim]"
+        ),
+        title="[bold]  3  [/bold]",
+        border_style=CORAL,
+        padding=(1, 3),
+        width=24,
+    )
+    card4 = Panel(
+        Text.from_markup(
+            f"[bold #8B9BB4]Quit[/bold #8B9BB4]\n\n"
             f"[dim]Exit the pipeline[/dim]"
         ),
         title="[bold]  Q  [/bold]",
-        border_style=CORAL,
+        border_style="#8B9BB4",
         padding=(1, 3),
-        width=26,
+        width=24,
     )
-    console.print(Columns([card1, card2, card3], expand=False), justify="center")
+    console.print(Columns([card1, card2, card3, card4], expand=False), justify="center")
     console.print()
 
 
@@ -123,6 +133,67 @@ def get_url_params(config):
     fallback = Confirm.ask(f"  [dim]Enable Whisper fallback?[/dim]", default=False)
     console.print()
     return {"url": url, "lang": lang, "fallback": fallback}
+
+
+def get_playlist_params(config):
+    console.print(Rule(f"[{CORAL}]Playlist URL[/{CORAL}]"))
+    console.print()
+    url      = Prompt.ask(f"  [{CORAL}]Playlist URL[/{CORAL}]")
+    lang     = Prompt.ask(f"  [dim]Language code[/dim]", default=config.get("default_lang", "en"))
+    fallback = Confirm.ask(f"  [dim]Enable Whisper fallback?[/dim]", default=False)
+    console.print()
+    return {"url": url, "lang": lang, "fallback": fallback}
+
+
+def select_videos_from_playlist(videos):
+    """Display playlist videos and let user select which ones to process."""
+    if not videos:
+        console.print(f"  [{CORAL}]No videos found in playlist.[/{CORAL}]\n")
+        return []
+    
+    console.print(Rule(f"[{CORAL}]Playlist Videos[/{CORAL}]"))
+    console.print()
+    
+    for i, video in enumerate(videos, 1):
+        title = (video.get("title") or "Untitled")[:65]
+        channel = video.get("channel") or video.get("uploader", "—")
+        duration = video.get("duration", 0)
+        if duration:
+            mins, secs = divmod(int(duration), 60)
+            duration_str = f"{mins}:{secs:02d}"
+        else:
+            duration_str = "—"
+        
+        console.print(f"  [bold {CORAL}]{i:>3}.[/bold {CORAL}] {title}  [dim]({channel}, {duration_str})[/dim]")
+    
+    console.print()
+    console.print(f"  [dim]Enter numbers to select (e.g., 1,3,5-10) or type 'all'[/dim]")
+    selection = Prompt.ask(f"  [bold]Select videos[/bold]")
+    
+    if selection.lower().strip() == "all":
+        return videos
+    
+    selected_indices = set()
+    for part in selection.split(","):
+        part = part.strip()
+        if "-" in part:
+            try:
+                start, end = part.split("-")
+                selected_indices.update(range(int(start.strip()) - 1, int(end.strip())))
+            except (ValueError, IndexError):
+                continue
+        else:
+            try:
+                selected_indices.add(int(part) - 1)
+            except ValueError:
+                continue
+    
+    selected = []
+    for idx in sorted(selected_indices):
+        if 0 <= idx < len(videos):
+            selected.append(videos[idx])
+    
+    return selected
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +302,7 @@ def main():
 
         choice = Prompt.ask(
             f"  [bold]Choose[/bold]",
-            choices=["1", "2", "q", "Q"],
+            choices=["1", "2", "3", "q", "Q"],
             show_choices=False,
         )
 
@@ -260,6 +331,23 @@ def main():
             params   = get_url_params(config)
             video_id = video_id_from_url(params["url"])
             run_pipeline([{"id": video_id}], config, params["lang"], params["fallback"], output_dir)
+
+        elif choice == "3":
+            params = get_playlist_params(config)
+            with console.status(
+                f"  [{CORAL}]Fetching playlist videos…[/{CORAL}]",
+                spinner="dots",
+                spinner_style=CORAL,
+            ):
+                videos = extract_playlist_videos(params["url"])
+
+            if not videos:
+                console.print(f"  [{CORAL}]No videos found in playlist.[/{CORAL}]\n")
+            else:
+                selected = select_videos_from_playlist(videos)
+                if selected:
+                    console.print(f"  [{CORAL}]Selected {len(selected)} video(s)[/{CORAL}]\n")
+                    run_pipeline(selected, config, params["lang"], params["fallback"], output_dir)
 
         if not Confirm.ask(f"  [dim]Run another?[/dim]", default=True):
             console.print(f"\n  [dim {MUTED}]Goodbye.[/dim {MUTED}]\n")
