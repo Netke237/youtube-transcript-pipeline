@@ -158,7 +158,12 @@ def get_url_params(config):
 def get_playlist_params(config):
     console.print(Rule(f"[{CORAL}]Playlist URL[/{CORAL}]"))
     console.print()
-    url      = Prompt.ask(f"  [{CORAL}]Playlist URL[/{CORAL}]")
+    default_playlist = config.get("default_playlist", "")
+    if default_playlist:
+        console.print(f"  [dim]Default playlist:[/dim] {default_playlist}")
+        url = Prompt.ask(f"  [{CORAL}]Playlist URL[/{CORAL}] (press Enter for default)", default=default_playlist)
+    else:
+        url = Prompt.ask(f"  [{CORAL}]Playlist URL[/{CORAL}]")
     lang     = Prompt.ask(f"  [dim]Language code[/dim]", default=config.get("default_lang", "en"))
     fallback = Confirm.ask(f"  [dim]Enable Whisper fallback?[/dim]", default=False)
     console.print()
