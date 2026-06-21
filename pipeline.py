@@ -8,6 +8,7 @@ Usage:
   python pipeline.py "search query" --limit 5
   python pipeline.py "search query" --lang de
   python pipeline.py --url "https://www.youtube.com/watch?v=XXXXXXXXXXX"
+  python pipeline.py --playlist "https://www.youtube.com/playlist?list=PL..."
   python pipeline.py "search query" --fallback     # enable audio fallback via Whisper
 """
 
@@ -45,6 +46,7 @@ def load_config():
         "whisper_model": s.get("whisper_model", "base"),
         "default_limit": s.getint("default_limit", 10),
         "default_lang": s.get("default_lang", "en"),
+        "default_playlist": s.get("default_playlist", ""),
     }
 
 
@@ -89,6 +91,32 @@ def search_videos(query, channel=None, limit=10):
         if line:
             try:
                 videos.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+    return videos
+
+
+def extract_playlist_videos(playlist_url):
+    """Extract all videos from a public YouTube playlist. Returns list of metadata dicts."""
+    cmd = YT_DLP + [
+        "--flat-playlist",
+        "--dump-json",
+        "--no-warnings",
+        playlist_url,
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if not result.stdout.strip():
+        print(f"  [debug] yt-dlp returned no output. stderr: {result.stderr[:300]}")
+        return []
+    
+    videos = []
+    for line in result.stdout.strip().split("\n"):
+        line = line.strip()
+        if line:
+            try:
+                data = json.loads(line)
+                videos.append(data)
             except json.JSONDecodeError:
                 pass
     return videos
@@ -295,6 +323,7 @@ def main():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("query", nargs="?", help="Search query")
     group.add_argument("--url", "-u", help="Process a single YouTube URL")
+    group.add_argument("--playlist", "-p", help="Process videos from a YouTube playlist URL")
 
     parser.add_argument("--channel", "-c", help="Filter search by channel name")
     parser.add_argument("--limit", "-n", type=int, default=None, help="Number of videos (default: from config)")
@@ -317,6 +346,10 @@ def main():
         video_id = video_id_from_url(args.url)
         videos = [{"id": video_id}]
         print(f"Processing single URL: {args.url}")
+    elif args.playlist:
+        print(f"Fetching playlist: {args.playlist}")
+        videos = extract_playlist_videos(args.playlist)
+        print(f"Found {len(videos)} videos\n")
     else:
         print(f"Searching: '{args.query}'" + (f"  channel: '{args.channel}'" if args.channel else ""))
         videos = search_videos(args.query, args.channel, limit)
